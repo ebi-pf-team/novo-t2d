@@ -11,7 +11,7 @@ import cx_Oracle
 # Populate NovoNordisk database, pulling data from UniProt proteins API and other sources
 
 # Fixes needed:
-# - kegg disease/description
+# - kegg disease
 # - IPRs with multiple children (only one taken at present) - check query
 # - interpro_match start/end
 # - reactome_step
@@ -269,6 +269,13 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (f[0], f[1], 1 + f[4].count('|')))
     nnd_conn.commit()
 
+kegg_desc = {}
+keggs = urllib.request.urlopen('http://rest.kegg.jp/list/pathway').read().decode('utf-8').rstrip('\n').split('\n')
+for line in keggs:
+  acc, desc = line.rstrip('\n').split('\t', maxsplit = 1)
+  acc = acc.replace('path:map', 'hsa') # Yuk, check API to see if there's a better way
+  kegg_desc[acc] = desc
+
 keggs = urllib.request.urlopen('http://rest.kegg.jp/link/hsa/pathway').read().decode('utf-8').rstrip('\n').split('\n')
 kegg_counts = {}
 kegg_sql = insert_sql('kegg', kegg_columns())
@@ -276,11 +283,12 @@ with nnd_conn.cursor() as cursor:
   if not count_table_rows(cursor, 'kegg'):
     for line in keggs:
       acc, step = line.split('\t')
+      acc = acc.replace('path:', '')
       if not acc in kegg_counts:
         kegg_counts[acc] = 0
       kegg_counts[acc] += 1
     for kegg in kegg_counts:
-      cursor.execute(kegg_sql, (kegg, "", kegg_counts[kegg], ""))
+      cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
     nnd_conn.commit()
 
 reactome_sql = insert_sql('reactome', reactome_columns())
