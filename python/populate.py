@@ -254,6 +254,7 @@ if m:
 
 with nnd_conn.cursor() as cursor:
   version_sql = insert_sql('versions', version_columns())
+  cursor.execute('delete from versions')
   cursor.execute(version_sql, ('Complex portal', cp_version))
   cursor.execute(version_sql, ('UniProtKB', ukb_version))
   nnd_conn.commit()
