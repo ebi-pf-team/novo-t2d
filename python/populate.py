@@ -15,7 +15,7 @@ import cx_Oracle
 # - IPRs with multiple children (only one taken at present) - check query
 # - interpro_match start/end
 # - reactome_step
-# - kegg_step
+# - kegg_step via API - streamline?
 # - target - transfer/update from previous version?
 # - versions
 # - auto generate schema?
@@ -317,6 +317,7 @@ for protein in get_protein(10090):
 
 with nnd_conn.cursor() as cursor:
   protein_sql = insert_sql('protein', protein_columns())
+  kegg_step_sql = insert_sql('kegg_step', kegg_step_columns())
   go_sql = insert_sql('gene_ontology', go_columns())
   ensembl_sql = insert_sql('ensembl_transcript', ensembl_columns())
   complex_sql = insert_sql('complex_component', complex_component_columns())
@@ -367,6 +368,28 @@ with nnd_conn.cursor() as cursor:
         cursor.execute(interpro_sql, entry)
         ip_loaded.add(ip_protein[0])
       cursor.execute(match_sql, ip_protein)
+
+    kegg_protein = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n').split('\t')
+    if len(kegg_protein) == 2:
+      kegg_pathways = []
+      kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein[1])).read().decode('utf-8').rstrip('\n').split('\n')
+      for line in kegg_entry:
+        if line.startswith('NAME'):
+          m = re.match('NAME\s+(\w+),?', line)
+          kegg_gene = m.group(1)
+        elif line.startswith('DEFINITION'):
+          m = re.match('DEFINITION\s+\(\w+\)\s+(.*)', line)
+          kegg_protein_desc = m.group(1)
+        elif line.startswith('PATHWAY'):
+          m = re.match('PATHWAY\s+(\w+)', line)
+          kegg_pathways.append(m.group(1))
+        elif len(kegg_pathways):
+          if line[0] != ' ':
+            break
+          m = re.match('\s+(\w+)', line)
+          kegg_pathways.append(m.group(1))
+      for kegg_pathway in kegg_pathways:
+        cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein[1], kegg_gene, kegg_protein_desc))
 
   nnd_conn.commit()
 
