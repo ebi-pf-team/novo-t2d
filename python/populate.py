@@ -241,6 +241,8 @@ def get_url(url):
 nnd_conn = nnd_db()
 ip_conn = ip_db()
 
+# Table: versions
+
 cp_versions = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/').read().decode('utf-8').rstrip('\n').replace('\r','').split('\n')
 for line in cp_versions:
   m = re.match('.*current -> (\d{4}-\d{2}-\d{2})', line)
@@ -259,9 +261,12 @@ with nnd_conn.cursor() as cursor:
   cursor.execute(version_sql, ('UniProtKB', ukb_version))
   nnd_conn.commit()
 
+# Table: complex_portal
+
 cp = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/homo_sapiens.tsv').read().decode('utf-8').rstrip('\n').split('\n')
 complex_sql = insert_sql('complex_portal', complex_portal_columns())
 with nnd_conn.cursor() as cursor:
+  # Skip if already filled, or delete?
   if not count_table_rows(cursor, 'complex_portal'):
     for line in cp:
       if line.startswith('#Complex ac'):
@@ -270,8 +275,11 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (f[0], f[1], 1 + f[4].count('|')))
     nnd_conn.commit()
 
+# Table: kegg
+
 kegg_desc = {}
 keggs = urllib.request.urlopen('http://rest.kegg.jp/list/pathway').read().decode('utf-8').rstrip('\n').split('\n')
+# Get descriptions
 for line in keggs:
   acc, desc = line.rstrip('\n').split('\t', maxsplit = 1)
   acc = acc.replace('path:map', 'hsa') # Yuk, check API to see if there's a better way
@@ -281,6 +289,7 @@ keggs = urllib.request.urlopen('http://rest.kegg.jp/link/hsa/pathway').read().de
 kegg_counts = {}
 kegg_sql = insert_sql('kegg', kegg_columns())
 with nnd_conn.cursor() as cursor:
+  # Skip if already filled, or delete?
   if not count_table_rows(cursor, 'kegg'):
     for line in keggs:
       acc, step = line.split('\t')
@@ -291,6 +300,8 @@ with nnd_conn.cursor() as cursor:
     for kegg in kegg_counts:
       cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
     nnd_conn.commit()
+
+# Table: reactome
 
 reactome_sql = insert_sql('reactome', reactome_columns())
 with nnd_conn.cursor() as cursor:
@@ -309,12 +320,16 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(reactome_sql, (r[0], r[1], r[2], reactomes[(r[0], r[1], r[2])]))
     nnd_conn.commit()
 
+# Get mouse orthologs
+
 orthologs = {}
 for protein in get_protein(10090):
   for ko in protein.ko:
     if not ko in orthologs:
       orthologs[ko] = []
     orthologs[ko].append([protein.acc, protein.org_id])
+
+# Fill protein and all other tables that hang off it
 
 with nnd_conn.cursor() as cursor:
   protein_sql = insert_sql('protein', protein_columns())
@@ -326,6 +341,7 @@ with nnd_conn.cursor() as cursor:
   ortholog_sql = insert_sql('ortholog', ortholog_columns())
   interpro_sql = insert_sql('interpro', interpro_columns())
   match_sql = insert_sql('interpro_match', interpro_match_columns())
+
   ip_loaded = set()
   ip_type_dict = {
     'F': 'Family',
@@ -370,10 +386,14 @@ with nnd_conn.cursor() as cursor:
         ip_loaded.add(ip_protein[0])
       cursor.execute(match_sql, ip_protein)
 
-    kegg_protein = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n').split('\t')
-    if len(kegg_protein) == 2:
+    # kegg_step
+    kegg_protein = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
+    # Convert UKB acc to kegg protein acc, assuming this only returns one result
+    if kegg_protein:
+      kegg_protein.pop(0) # above returns two IDs; skip the first [UKB] accession
       kegg_pathways = []
-      kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein[1])).read().decode('utf-8').rstrip('\n').split('\n')
+      kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein)).read().decode('utf-8').rstrip('\n').split('\n')
+      # This API call seems slow, esp when we might loop over TrEMBL
       for line in kegg_entry:
         if line.startswith('NAME'):
           m = re.match('NAME\s+(\w+),?', line)
@@ -385,12 +405,13 @@ with nnd_conn.cursor() as cursor:
           m = re.match('PATHWAY\s+(\w+)', line)
           kegg_pathways.append(m.group(1))
         elif len(kegg_pathways):
+          # have reached pathway lines: handle remaining entries
           if line[0] != ' ':
             break
           m = re.match('\s+(\w+)', line)
           kegg_pathways.append(m.group(1))
       for kegg_pathway in kegg_pathways:
-        cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein[1], kegg_gene, kegg_protein_desc))
+        cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
 
   nnd_conn.commit()
 
