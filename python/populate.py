@@ -11,7 +11,7 @@ import cx_Oracle
 # Populate NovoNordisk database, pulling data from UniProt proteins API and other sources
 
 # Fixes needed:
-# - kegg disease
+# - kegg.disease
 # - IPRs with multiple children (only one taken at present) - check query
 # - interpro_match start/end
 # - reactome_step
@@ -19,6 +19,7 @@ import cx_Oracle
 # - target - transfer/update from previous version?
 # - versions
 # - auto generate schema?
+# - config file for IPPRO parameters?
 # - UniProt proteins API - failures, esp. when including TrEMBL
 
 
@@ -32,7 +33,7 @@ class Protein(object):
     self.reviewed = 1 if obj['info']['type'] == 'Swiss-Prot' else 0
 
     self.genes = []
-    if 'gene' in obj:# and 'name' in obj['gene']:
+    if 'gene' in obj:
       for gene in obj['gene']:
         if 'name' in gene:
           self.genes.append(gene['name']['value'])
@@ -197,7 +198,7 @@ def count_table_rows(cursor, table):
 
 
 def nnd_db():
-  return pymysql.connect(host        = 'localhost',
+  return pymysql.connect(host        = os.getenv('NND_HOST'),
                          user        = os.getenv('NND_USER'),
                          password    = os.getenv('NND_PASS'),
                          db          = os.getenv('NND_DB'),
@@ -206,6 +207,8 @@ def nnd_db():
 
 
 def ip_db():
+  # Should the IPPRO connection details go in a config file?
+  # I've used ENV for user/pass as I was using an 'ops$' user.
   return cx_Oracle.connect(user     = os.getenv('IP_USER'),
                            password = os.getenv('IP_PASS'),
                            dsn      = cx_Oracle.makedsn('ora-vm5-019.ebi.ac.uk',
