@@ -29,7 +29,6 @@ class Protein(object):
     self.acc = obj['accession']
     self.id = obj['id']
     self.org_id = obj['organism']['taxonomy']
-    self.type = 'reviewed' if obj['info']['type'] == 'Swiss-Prot' else 'unreviewed'
     self.reviewed = 1 if obj['info']['type'] == 'Swiss-Prot' else 0
 
     self.genes = []
@@ -219,10 +218,20 @@ def ip_db():
 def get_protein(taxon, max = -1): # Max for testing purposes
   offset = 0
   count = 0
+  batch = 500
   while True:
-    url = "https://www.ebi.ac.uk/proteins/api/proteins?size=500&isoform=0&taxid=%d&reviewed=true&offset=%d" % (taxon, offset)
-  # url = "https://www.ebi.ac.uk/proteins/api/proteins?size=500&isoform=0&taxid=%d&offset=%d" % (taxon, offset)
-    entries = json.loads(get_url(url))
+    url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
+  # url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
+    try:
+      entries = json.loads(get_url(url))
+    except requests.HTTPError as e:
+      # in case of failure, likely an API timeout: gradually reduce the batch size
+      if batch == 500:
+        batch = 10
+        continue
+      if batch == 10:
+        batch = 1
+        continue
     if len(entries) == 0:
       return
     for entry in entries:
@@ -230,7 +239,12 @@ def get_protein(taxon, max = -1): # Max for testing purposes
         return
       count += 1
       yield Protein(entry)
-    offset += 500
+    offset += batch
+    # reset batch size
+    if offset % 500 == 0:
+      batch = 500
+    elif offset % 10 == 0:
+      batch = 10
 
 
 def get_url(url):
@@ -357,7 +371,9 @@ with nnd_conn.cursor() as cursor:
     'P': 'PTM site'
   }
 
+  count = 0
   for protein in get_protein(9606):
+    count += 1
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
 
     for enst in protein.enst:
@@ -415,6 +431,9 @@ with nnd_conn.cursor() as cursor:
           kegg_pathways.append(m.group(1))
       for kegg_pathway in kegg_pathways:
         cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
+
+    if not count % 1000:
+      nnd_conn.commit()
 
   nnd_conn.commit()
 
