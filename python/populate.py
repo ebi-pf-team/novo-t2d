@@ -191,6 +191,11 @@ def ensembl_columns():
   return ['uniprot_acc', 'uniprot_isoform', 'ensembl_transcript_acc']
 
 
+def check_entry(cursor, table, column, value):
+  cursor.execute('select count(*) from ' + table + ' where ' + column + ' = %s', (value))
+  return cursor.fetchone()['count(*)']
+
+
 def count_table_rows(cursor, table):
   cursor.execute('select count(*) from ' + table)
   return cursor.fetchone()['count(*)']
@@ -374,6 +379,9 @@ with nnd_conn.cursor() as cursor:
   count = 0
   for protein in get_protein(9606):
     count += 1
+    # Skip existing entires; may want to make this optional for speed?
+    if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
+      continue
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
 
     for enst in protein.enst:
@@ -397,12 +405,18 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (cp, protein.acc))
     
     for ip_protein in get_ip_proteins(ip_conn, protein.acc):
-      if not ip_protein[0] in ip_loaded:
-        entry = list(get_ip_entry(ip_conn, ip_protein[0]))
-        entry[1] = ip_type_dict[entry[1]]
-        entry[5] = 1 if entry[5] == 'Y' else 0
-        cursor.execute(interpro_sql, entry)
+      if ip_protein[0] in ip_loaded:
+        continue
+      if check_entry(cursor, 'interpro', 'interpro_acc', ip_protein[0]):
         ip_loaded.add(ip_protein[0])
+        continue
+      entry = list(get_ip_entry(ip_conn, ip_protein[0]))
+      entry[1] = ip_type_dict[entry[1]]
+      entry[5] = 1 if entry[5] == 'Y' else 0
+      cursor.execute(interpro_sql, entry)
+      ip_loaded.add(ip_protein[0])
+
+    for ip_protein in get_ip_proteins(ip_conn, protein.acc):
       cursor.execute(match_sql, ip_protein)
 
     # kegg_step
