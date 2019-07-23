@@ -225,6 +225,7 @@ def get_protein(taxon, max = -1): # Max for testing purposes
   count = 0
   batch = 500
   while True:
+    # Make TrEMBL and option?
     url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
   # url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
     try:
@@ -419,6 +420,12 @@ with nnd_conn.cursor() as cursor:
     for ip_protein in get_ip_proteins(ip_conn, protein.acc):
       cursor.execute(match_sql, ip_protein)
 
+    if not count % 1000:
+      sys.stdout.flush()
+      nnd_conn.commit()
+      # May want to make this output an option?
+      print ('Loaded: ' + str(count) + '\r', end = '')
+
     # kegg_step
     kegg_protein = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
     # Convert UKB acc to kegg protein acc, assuming this only returns one result
@@ -450,4 +457,5 @@ with nnd_conn.cursor() as cursor:
       nnd_conn.commit()
 
   nnd_conn.commit()
+  print ('Loaded: ' + str(count))
 
