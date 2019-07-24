@@ -20,7 +20,6 @@ import cx_Oracle
 # - versions
 # - auto generate schema?
 # - config file for IPPRO parameters?
-# - UniProt proteins API - failures, esp. when including TrEMBL
 
 
 # Convenience class for unpacking the protein json string
@@ -420,12 +419,6 @@ with nnd_conn.cursor() as cursor:
     for ip_protein in get_ip_proteins(ip_conn, protein.acc):
       cursor.execute(match_sql, ip_protein)
 
-    if not count % 1000:
-      sys.stdout.flush()
-      nnd_conn.commit()
-      # May want to make this output an option?
-      print ('Loaded: ' + str(count) + '\r', end = '')
-
     # kegg_step
     res = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
     if not res:
@@ -460,6 +453,9 @@ with nnd_conn.cursor() as cursor:
 
     if not count % 1000:
       nnd_conn.commit()
+      # May want to make this output an option?
+      print ('Loaded: ' + str(count) + '\r', end = '')
+      sys.stdout.flush()
 
   nnd_conn.commit()
   print ('Loaded: ' + str(count))
