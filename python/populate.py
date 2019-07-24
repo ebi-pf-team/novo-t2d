@@ -427,13 +427,17 @@ with nnd_conn.cursor() as cursor:
       print ('Loaded: ' + str(count) + '\r', end = '')
 
     # kegg_step
-    kegg_protein = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
-    # Convert UKB acc to kegg protein acc, assuming this only returns one result
-    if kegg_protein:
-      kegg_protein.pop(0) # above returns two IDs; skip the first [UKB] accession
+    res = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
+    if not res:
+      continue
+    kegg_proteins = res.split('\n')
+    # Convert UKB acc to kegg protein acc
+    for kegg_protein in kegg_proteins:
+      kegg_protein = kegg_protein.split('\t')[1] # above returns two IDs; skip the first [UKB] accession
       kegg_pathways = []
       kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein)).read().decode('utf-8').rstrip('\n').split('\n')
       # This API call seems slow, esp when we might loop over TrEMBL
+      kegg_gene = kegg_protein_desc = None # Check: some KEGG entries are not complete
       for line in kegg_entry:
         if line.startswith('NAME'):
           m = re.match('NAME\s+(\w+),?', line)
@@ -450,8 +454,9 @@ with nnd_conn.cursor() as cursor:
             break
           m = re.match('\s+(\w+)', line)
           kegg_pathways.append(m.group(1))
-      for kegg_pathway in kegg_pathways:
-        cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
+      if kegg_gene and kegg_protein_desc:
+        for kegg_pathway in kegg_pathways:
+          cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
 
     if not count % 1000:
       nnd_conn.commit()
