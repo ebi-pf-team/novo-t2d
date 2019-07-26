@@ -311,17 +311,18 @@ keggs = urllib.request.urlopen('http://rest.kegg.jp/link/hsa/pathway').read().de
 kegg_counts = {}
 kegg_sql = insert_sql('kegg', kegg_columns())
 with nnd_conn.cursor() as cursor:
-  # Skip if already filled, or delete?
-  if not count_table_rows(cursor, 'kegg'):
-    for line in keggs:
-      acc, step = line.split('\t')
-      acc = acc.replace('path:', '')
-      if not acc in kegg_counts:
-        kegg_counts[acc] = 0
-      kegg_counts[acc] += 1
-    for kegg in kegg_counts:
-      cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
-    nnd_conn.commit()
+  for line in keggs:
+    acc, step = line.split('\t')
+    acc = acc.replace('path:', '')
+    # Skip if already have this accession
+    if check_entry(cursor, 'kegg', 'kegg_pathway_id', acc):
+      continue
+    if not acc in kegg_counts:
+      kegg_counts[acc] = 0
+    kegg_counts[acc] += 1
+  for kegg in kegg_counts:
+    cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
+  nnd_conn.commit()
 
 # Table: reactome
 
