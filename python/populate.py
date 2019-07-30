@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import requests
+import logging
 import argparse
 import re
 import os
@@ -100,6 +101,7 @@ class Protein(object):
 def get_args(args):
     parser = argparse.ArgumentParser(prog = args[0])
     parser.add_argument('-t', '--tr', action ='store_true', dest = 'trembl', required = False, help = 'Include TrEMBL')
+    parser.add_argument("-l", "--log", help = "log file", dest = "log", action = "store", required = False)
     return vars(parser.parse_args())
 
 
@@ -275,6 +277,18 @@ ip_conn = ip_db()
 
 # Table: versions
 
+args = get_args(sys.argv)
+
+log = logging.getLogger()
+log.setLevel(logging.INFO)
+if args['log']:
+  handler = logging.FileHandler(args['log'])
+else:
+  handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s: %(message)s', "%Y-%m-%d %H:%M:%S"))
+handler.terminator = ""
+log.addHandler(handler)
+
 cp_versions = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/').read().decode('utf-8').rstrip('\n').replace('\r','').split('\n')
 for line in cp_versions:
   m = re.match('.*current -> (\d{4}-\d{2}-\d{2})', line)
@@ -306,6 +320,7 @@ with nnd_conn.cursor() as cursor:
       f = line.split('\t')
       cursor.execute(complex_sql, (f[0], f[1], 1 + f[4].count('|')))
     nnd_conn.commit()
+log.info("Done table complex_portal\n")
 
 # Table: kegg
 
@@ -331,8 +346,12 @@ with nnd_conn.cursor() as cursor:
       kegg_counts[acc] = 0
     kegg_counts[acc] += 1
   for kegg in kegg_counts:
+    if not kegg in kegg_desc:
+      log.info("No description for " + kegg + "\n")
+      kegg_desc[kegg] = ''
     cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
   nnd_conn.commit()
+log.info("Done table kegg\n")
 
 # Table: reactome
 
@@ -352,6 +371,7 @@ with nnd_conn.cursor() as cursor:
     for r in reactomes:
       cursor.execute(reactome_sql, (r[0], r[1], r[2], reactomes[(r[0], r[1], r[2])]))
     nnd_conn.commit()
+log.info("Done table reactome\n")
 
 # Get mouse orthologs
 
@@ -361,6 +381,7 @@ for protein in get_protein(10090, args['trembl']):
     if not ko in orthologs:
       orthologs[ko] = []
     orthologs[ko].append([protein.acc, protein.org_id])
+log.info("Obtained mouse orthologs\n")
 
 # Fill protein and all other tables that hang off it
 
@@ -464,9 +485,9 @@ with nnd_conn.cursor() as cursor:
     if not count % 1000:
       nnd_conn.commit()
       # May want to make this output an option?
-      print ('Loaded: ' + str(count) + '\r', end = '')
+      log.info('Loaded: ' + str(count) + '\r')
       sys.stdout.flush()
 
   nnd_conn.commit()
-  print ('Loaded: ' + str(count))
+  log.info('Loaded: ' + str(count) + "\n")
 
