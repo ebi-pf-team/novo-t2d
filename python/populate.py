@@ -1,4 +1,7 @@
+#!/usr/bin/env python3
+
 import requests
+import argparse
 import re
 import os
 import sys
@@ -92,6 +95,12 @@ class Protein(object):
       elif db_ref['type'] == 'GO':
         go = db_ref['properties']['term'].split(':', maxsplit = 1)
         self.go.append([db_ref['id'], go_dict[go[0]], go[1]])
+
+
+def get_args(args):
+    parser = argparse.ArgumentParser(prog = args[0])
+    parser.add_argument('-t', '--tr', action ='store_true', dest = 'trembl', required = False, help = 'Include TrEMBL')
+    return vars(parser.parse_args())
 
 
 def get_ip_entry(conn, entry_acc):
@@ -219,14 +228,15 @@ def ip_db():
                                                          service_name = 'IPPRO'))
 
 
-def get_protein(taxon, max = -1): # Max for testing purposes
+def get_protein(taxon, trembl, max = -1): # Max for testing purposes
   offset = 0
   count = 0
   batch = 500
   while True:
-    # Make TrEMBL and option?
-    url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
-  # url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
+    if trembl:
+      url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
+    else:
+      url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
     try:
       entries = json.loads(get_url(url))
     except requests.HTTPError as e:
@@ -346,7 +356,7 @@ with nnd_conn.cursor() as cursor:
 # Get mouse orthologs
 
 orthologs = {}
-for protein in get_protein(10090):
+for protein in get_protein(10090, args['trembl']):
   for ko in protein.ko:
     if not ko in orthologs:
       orthologs[ko] = []
@@ -378,11 +388,11 @@ with nnd_conn.cursor() as cursor:
   }
 
   count = 0
-  for protein in get_protein(9606):
-    count += 1
+  for protein in get_protein(9606, args['trembl']):
     # Skip existing entires; may want to make this optional for speed?
     if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
       continue
+    count += 1
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
 
     for enst in protein.enst:
