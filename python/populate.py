@@ -272,6 +272,35 @@ def get_url(url):
   return r.text
 
 
+def get_kegg_protein(pid):
+  try:
+    kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (pid)).read().decode('utf-8').rstrip('\n').split('\n')
+  except urllib.error.HTTPError as e:
+    if str(e) == 'HTTP Error 404: Not Found':
+      return []
+  kegg_gene = kegg_protein_desc = None # Check: some KEGG entries are not complete
+  kegg_pathways = []
+  for line in kegg_entry:
+    if line.startswith('NAME'):
+      m = re.match('NAME\s+(\w+),?', line)
+      kegg_gene = m.group(1)
+    elif line.startswith('DEFINITION'):
+      m = re.match('DEFINITION\s+\(\w+\)\s+(.*)', line)
+      kegg_protein_desc = m.group(1)
+    elif line.startswith('PATHWAY'):
+      m = re.match('PATHWAY\s+(\w+)', line)
+      kegg_pathways.append(m.group(1))
+    elif len(kegg_pathways):
+      # have reached pathway lines: handle remaining entries
+      if line[0] != ' ':
+        break
+      m = re.match('\s+(\w+)', line)
+      kegg_pathways.append(m.group(1))
+  if kegg_gene and kegg_protein_desc:
+    return [kegg_gene, kegg_protein_desc, kegg_pathways]
+  return []
+ 
+
 nnd_conn = nnd_db()
 ip_conn = ip_db()
 
@@ -451,36 +480,27 @@ with nnd_conn.cursor() as cursor:
     for ip_protein in get_ip_proteins(ip_conn, protein.acc):
       cursor.execute(match_sql, ip_protein)
 
+    kegg_proteins = {}
+
     # kegg_step
     res = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
     if res:
-      kegg_proteins = res.split('\n')
+      kegg_protein_ids = res.split('\n')
       # Convert UKB acc to kegg protein acc
-      for kegg_protein in kegg_proteins:
-        kegg_protein = kegg_protein.split('\t')[1] # above returns two IDs; skip the first [UKB] accession
-        kegg_pathways = []
-        kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein)).read().decode('utf-8').rstrip('\n').split('\n')
+      for kegg_protein_id in kegg_protein_ids:
+        kegg_protein_id = kegg_protein_id.split('\t')[1] # above returns two IDs; skip the first [UKB] accession
         # This API call seems slow, esp when we might loop over TrEMBL
-        kegg_gene = kegg_protein_desc = None # Check: some KEGG entries are not complete
-        for line in kegg_entry:
-          if line.startswith('NAME'):
-            m = re.match('NAME\s+(\w+),?', line)
-            kegg_gene = m.group(1)
-          elif line.startswith('DEFINITION'):
-            m = re.match('DEFINITION\s+\(\w+\)\s+(.*)', line)
-            kegg_protein_desc = m.group(1)
-          elif line.startswith('PATHWAY'):
-            m = re.match('PATHWAY\s+(\w+)', line)
-            kegg_pathways.append(m.group(1))
-          elif len(kegg_pathways):
-            # have reached pathway lines: handle remaining entries
-            if line[0] != ' ':
-              break
-            m = re.match('\s+(\w+)', line)
-            kegg_pathways.append(m.group(1))
-        if kegg_gene and kegg_protein_desc:
-          for kegg_pathway in kegg_pathways:
-            cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
+        if not kegg_protein_id in kegg_proteins:
+          entry = get_kegg_protein(kegg_protein_id)
+          if len(entry) == 0:
+            log.info("KEGG protein " + kegg_protein_id + " not found\n")
+            continue
+          kegg_proteins[kegg_protein_id] = entry
+        kegg_gene = kegg_proteins[kegg_protein_id][0]
+        kegg_protein_desc = kegg_proteins[kegg_protein_id][1]
+        kegg_pathways = kegg_proteins[kegg_protein_id][2]
+        for kegg_pathway in kegg_pathways:
+          cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein_id, kegg_gene, kegg_protein_desc))
 
     if not count % 1000:
       nnd_conn.commit()
