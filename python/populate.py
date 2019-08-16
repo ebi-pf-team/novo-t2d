@@ -1,4 +1,8 @@
+#!/usr/bin/env python3
+
 import requests
+import logging
+import argparse
 import re
 import os
 import sys
@@ -92,6 +96,13 @@ class Protein(object):
       elif db_ref['type'] == 'GO':
         go = db_ref['properties']['term'].split(':', maxsplit = 1)
         self.go.append([db_ref['id'], go_dict[go[0]], go[1]])
+
+
+def get_args(args):
+    parser = argparse.ArgumentParser(prog = args[0])
+    parser.add_argument('-t', '--tr', action ='store_true', dest = 'trembl', required = False, help = 'Include TrEMBL')
+    parser.add_argument("-l", "--log", help = "log file", dest = "log", action = "store", required = False)
+    return vars(parser.parse_args())
 
 
 def get_ip_entry(conn, entry_acc):
@@ -219,14 +230,15 @@ def ip_db():
                                                          service_name = 'IPPRO'))
 
 
-def get_protein(taxon, max = -1): # Max for testing purposes
+def get_protein(taxon, trembl, max = -1): # Max for testing purposes
   offset = 0
   count = 0
   batch = 500
   while True:
-    # Make TrEMBL and option?
-    url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
-  # url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
+    if trembl:
+      url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&offset=%d" % (batch, taxon, offset)
+    else:
+      url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
     try:
       entries = json.loads(get_url(url))
     except requests.HTTPError as e:
@@ -260,10 +272,51 @@ def get_url(url):
   return r.text
 
 
+def get_kegg_protein(pid):
+  try:
+    kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (pid)).read().decode('utf-8').rstrip('\n').split('\n')
+  except urllib.error.HTTPError as e:
+    if str(e) == 'HTTP Error 404: Not Found':
+      return []
+  kegg_gene = kegg_protein_desc = None # Check: some KEGG entries are not complete
+  kegg_pathways = []
+  for line in kegg_entry:
+    if line.startswith('NAME'):
+      m = re.match('NAME\s+(\w+),?', line)
+      kegg_gene = m.group(1)
+    elif line.startswith('DEFINITION'):
+      m = re.match('DEFINITION\s+\(\w+\)\s+(.*)', line)
+      kegg_protein_desc = m.group(1)
+    elif line.startswith('PATHWAY'):
+      m = re.match('PATHWAY\s+(\w+)', line)
+      kegg_pathways.append(m.group(1))
+    elif len(kegg_pathways):
+      # have reached pathway lines: handle remaining entries
+      if line[0] != ' ':
+        break
+      m = re.match('\s+(\w+)', line)
+      kegg_pathways.append(m.group(1))
+  if kegg_gene and kegg_protein_desc:
+    return [kegg_gene, kegg_protein_desc, kegg_pathways]
+  return []
+ 
+
 nnd_conn = nnd_db()
 ip_conn = ip_db()
 
 # Table: versions
+
+args = get_args(sys.argv)
+
+log = logging.getLogger()
+log.setLevel(logging.INFO)
+if args['log']:
+  handler = logging.FileHandler(args['log'])
+else:
+  handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s: %(message)s', "%Y-%m-%d %H:%M:%S"))
+handler.terminator = ""
+log.addHandler(handler)
 
 cp_versions = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/').read().decode('utf-8').rstrip('\n').replace('\r','').split('\n')
 for line in cp_versions:
@@ -296,6 +349,7 @@ with nnd_conn.cursor() as cursor:
       f = line.split('\t')
       cursor.execute(complex_sql, (f[0], f[1], 1 + f[4].count('|')))
     nnd_conn.commit()
+log.info("Done table complex_portal\n")
 
 # Table: kegg
 
@@ -321,8 +375,12 @@ with nnd_conn.cursor() as cursor:
       kegg_counts[acc] = 0
     kegg_counts[acc] += 1
   for kegg in kegg_counts:
+    if not kegg in kegg_desc:
+      log.info("No description for " + kegg + "\n")
+      kegg_desc[kegg] = ''
     cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
   nnd_conn.commit()
+log.info("Done table kegg\n")
 
 # Table: reactome
 
@@ -342,15 +400,17 @@ with nnd_conn.cursor() as cursor:
     for r in reactomes:
       cursor.execute(reactome_sql, (r[0], r[1], r[2], reactomes[(r[0], r[1], r[2])]))
     nnd_conn.commit()
+log.info("Done table reactome\n")
 
 # Get mouse orthologs
 
 orthologs = {}
-for protein in get_protein(10090):
+for protein in get_protein(10090, args['trembl']):
   for ko in protein.ko:
     if not ko in orthologs:
       orthologs[ko] = []
     orthologs[ko].append([protein.acc, protein.org_id])
+log.info("Obtained mouse orthologs\n")
 
 # Fill protein and all other tables that hang off it
 
@@ -378,11 +438,11 @@ with nnd_conn.cursor() as cursor:
   }
 
   count = 0
-  for protein in get_protein(9606):
-    count += 1
+  for protein in get_protein(9606, args['trembl']):
     # Skip existing entires; may want to make this optional for speed?
     if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
       continue
+    count += 1
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
 
     for enst in protein.enst:
@@ -420,43 +480,34 @@ with nnd_conn.cursor() as cursor:
     for ip_protein in get_ip_proteins(ip_conn, protein.acc):
       cursor.execute(match_sql, ip_protein)
 
+    kegg_proteins = {}
+
     # kegg_step
     res = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
     if res:
-      kegg_proteins = res.split('\n')
+      kegg_protein_ids = res.split('\n')
       # Convert UKB acc to kegg protein acc
-      for kegg_protein in kegg_proteins:
-        kegg_protein = kegg_protein.split('\t')[1] # above returns two IDs; skip the first [UKB] accession
-        kegg_pathways = []
-        kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (kegg_protein)).read().decode('utf-8').rstrip('\n').split('\n')
+      for kegg_protein_id in kegg_protein_ids:
+        kegg_protein_id = kegg_protein_id.split('\t')[1] # above returns two IDs; skip the first [UKB] accession
         # This API call seems slow, esp when we might loop over TrEMBL
-        kegg_gene = kegg_protein_desc = None # Check: some KEGG entries are not complete
-        for line in kegg_entry:
-          if line.startswith('NAME'):
-            m = re.match('NAME\s+(\w+),?', line)
-            kegg_gene = m.group(1)
-          elif line.startswith('DEFINITION'):
-            m = re.match('DEFINITION\s+\(\w+\)\s+(.*)', line)
-            kegg_protein_desc = m.group(1)
-          elif line.startswith('PATHWAY'):
-            m = re.match('PATHWAY\s+(\w+)', line)
-            kegg_pathways.append(m.group(1))
-          elif len(kegg_pathways):
-            # have reached pathway lines: handle remaining entries
-            if line[0] != ' ':
-              break
-            m = re.match('\s+(\w+)', line)
-            kegg_pathways.append(m.group(1))
-        if kegg_gene and kegg_protein_desc:
-          for kegg_pathway in kegg_pathways:
-            cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein, kegg_gene, kegg_protein_desc))
+        if not kegg_protein_id in kegg_proteins:
+          entry = get_kegg_protein(kegg_protein_id)
+          if len(entry) == 0:
+            log.info("KEGG protein " + kegg_protein_id + " not found\n")
+            continue
+          kegg_proteins[kegg_protein_id] = entry
+        kegg_gene = kegg_proteins[kegg_protein_id][0]
+        kegg_protein_desc = kegg_proteins[kegg_protein_id][1]
+        kegg_pathways = kegg_proteins[kegg_protein_id][2]
+        for kegg_pathway in kegg_pathways:
+          cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein_id, kegg_gene, kegg_protein_desc))
 
     if not count % 1000:
       nnd_conn.commit()
       # May want to make this output an option?
-      print ('Loaded: ' + str(count) + '\r', end = '')
+      log.info('Loaded: ' + str(count) + '\r')
       sys.stdout.flush()
 
   nnd_conn.commit()
-  print ('Loaded: ' + str(count))
+  log.info('Loaded: ' + str(count) + "\n")
 
