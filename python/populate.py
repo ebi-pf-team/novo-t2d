@@ -105,38 +105,60 @@ def get_args(args):
     return vars(parser.parse_args())
 
 
-def get_ip_entry(conn, entry_acc):
-  cur = conn.cursor()
-  cur.execute(
-    """
-    select
-      e.entry_ac, e.entry_type, e.short_name, em.protein_count,
-      e2e.entry_ac, e.checked
-    from interpro.entry e
-    join interpro.mv_entry_match em
-      on (em.entry_ac=e.entry_ac)
-    left join interpro.entry2entry e2e
-      on (e2e.parent_ac=e.entry_ac)
-    where e.entry_ac = :1
-    """, (entry_acc,))
-
-  # rows = cur.fetchall() # FIXME: IPR with multiple children
-  rows = cur.fetchone()
-  cur.close()
-  return rows
+ip_type_dict = {
+  'family': 'Family',
+  'domain': 'Domain',
+  'repeat': 'Repeat',
+  'conserved_site': 'conserved site',
+  'homologous_superfamily': 'Homologous Superfamily',
+  'active_site': 'active site',
+  'binding_site': 'binding site',
+  'ptm': 'PTM site',
+}
 
 
-def get_ip_proteins(conn, protein_acc):
-  cur = conn.cursor()
-  cur.execute(
-    """
-    select entry_ac, protein_ac, 1, 0
-    from interpro.mv_entry2protein
-    where protein_ac = :1
-    """, (protein_acc,)) # start, end in interpro_match = 1, 0?
-  rows = cur.fetchall()
-  cur.close()
-  return rows
+def get_ip_entry(entry_acc):
+  # url = 'https://www.ebi.ac.uk/interpro/beta/api/entry/InterPro/%s/protein/UniProt' % (entry_acc)
+  # url = 'http://www.ebi.ac.uk/interpro/beta/api/entry/all/protein/UniProt/%s' % (entry_acc)
+  url = 'https://www.ebi.ac.uk/interpro/beta/api/entry/InterPro/%s' % (entry_acc)
+  entry = json.loads(get_url(url))['metadata']
+  entry_type = ip_type_dict[entry['type']]
+  entry_name = entry['name']['short']
+  num_proteins = entry['counters']['proteins']
+  children = entry['hierarchy']['children']
+  child = children[0]['accession'] if len(children) else ''
+  return [entry_acc, entry_type, entry_name, num_proteins, child, 1]
+
+
+def get_ip_proteins(protein_acc):
+  # Better to get all in one go (omit the search parameter) but the pagination doesn't really work
+  url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?is_fragment=false&search=%s' % (protein_acc)
+  res = get_url(url)
+  if not len(res):
+    return []
+  try:
+    res = json.loads(get_url(url))
+  except json.decoder.JSONDecodeError as e:
+    print (res)
+    print (e)
+    sys.exit(1)
+  if not 'results' in res:
+    print (res)
+    sys.exit(1)
+  results = res['results']
+  if not len(results) or not 'entry_subset' in results[0]:
+    print(results)
+    sys.exit(1)
+  entry_subsets = json.loads(get_url(url))['results'][0]['entry_subset']
+  entries = []
+  for entry_subset in entry_subsets:
+    entry = []
+    entry.append(entry_subset['accession'].upper())
+    entry.append(protein.acc)
+    entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['start'])
+    entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['end'])
+    entries.append(entry)
+  return entries
 
 
 def insert_sql(table, columns): # Hardcoded column order, bad
@@ -220,16 +242,6 @@ def nnd_db():
                          cursorclass = pymysql.cursors.DictCursor)
 
 
-def ip_db():
-  # Should the IPPRO connection details go in a config file?
-  # I've used ENV for user/pass as I was using an 'ops$' user.
-  return cx_Oracle.connect(user     = os.getenv('IP_USER'),
-                           password = os.getenv('IP_PASS'),
-                           dsn      = cx_Oracle.makedsn('ora-vm5-019.ebi.ac.uk',
-                                                        '1531',
-                                                         service_name = 'IPPRO'))
-
-
 def get_protein(taxon, trembl, max = -1): # Max for testing purposes
   offset = 0
   count = 0
@@ -302,7 +314,6 @@ def get_kegg_protein(pid):
  
 
 nnd_conn = nnd_db()
-ip_conn = ip_db()
 
 # Table: versions
 
@@ -315,7 +326,6 @@ if args['log']:
 else:
   handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s: %(message)s', "%Y-%m-%d %H:%M:%S"))
-handler.terminator = ""
 log.addHandler(handler)
 
 cp_versions = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/').read().decode('utf-8').rstrip('\n').replace('\r','').split('\n')
@@ -349,7 +359,7 @@ with nnd_conn.cursor() as cursor:
       f = line.split('\t')
       cursor.execute(complex_sql, (f[0], f[1], 1 + f[4].count('|')))
     nnd_conn.commit()
-log.info("Done table complex_portal\n")
+log.info("Done table complex_portal")
 
 # Table: kegg
 
@@ -380,7 +390,7 @@ with nnd_conn.cursor() as cursor:
       kegg_desc[kegg] = ''
     cursor.execute(kegg_sql, (kegg, kegg_desc[kegg], kegg_counts[kegg], ""))
   nnd_conn.commit()
-log.info("Done table kegg\n")
+log.info("Done table kegg")
 
 # Table: reactome
 
@@ -400,7 +410,7 @@ with nnd_conn.cursor() as cursor:
     for r in reactomes:
       cursor.execute(reactome_sql, (r[0], r[1], r[2], reactomes[(r[0], r[1], r[2])]))
     nnd_conn.commit()
-log.info("Done table reactome\n")
+log.info("Done table reactome")
 
 # Get mouse orthologs
 
@@ -410,7 +420,7 @@ for protein in get_protein(10090, args['trembl']):
     if not ko in orthologs:
       orthologs[ko] = []
     orthologs[ko].append([protein.acc, protein.org_id])
-log.info("Obtained mouse orthologs\n")
+log.info("Obtained mouse orthologs")
 
 # Fill protein and all other tables that hang off it
 
@@ -426,16 +436,6 @@ with nnd_conn.cursor() as cursor:
   match_sql = insert_sql('interpro_match', interpro_match_columns())
 
   ip_loaded = set()
-  ip_type_dict = {
-    'F': 'Family',
-    'D': 'Domain',
-    'R': 'Repeat',
-    'C': 'conserved site',
-    'H': 'Homologous Superfamily',
-    'A': 'active site',
-    'B': 'binding site',
-    'P': 'PTM site'
-  }
 
   count = 0
   for protein in get_protein(9606, args['trembl']):
@@ -465,19 +465,18 @@ with nnd_conn.cursor() as cursor:
     for cp in protein.complex_portal_xref:
       cursor.execute(complex_sql, (cp, protein.acc))
     
-    for ip_protein in get_ip_proteins(ip_conn, protein.acc):
+    ip_proteins = get_ip_proteins(protein.acc)
+    for ip_protein in ip_proteins:
       if ip_protein[0] in ip_loaded:
         continue
       if check_entry(cursor, 'interpro', 'interpro_acc', ip_protein[0]):
         ip_loaded.add(ip_protein[0])
         continue
-      entry = list(get_ip_entry(ip_conn, ip_protein[0]))
-      entry[1] = ip_type_dict[entry[1]]
-      entry[5] = 1 if entry[5] == 'Y' else 0
+      entry = get_ip_entry(ip_protein[0])
       cursor.execute(interpro_sql, entry)
       ip_loaded.add(ip_protein[0])
 
-    for ip_protein in get_ip_proteins(ip_conn, protein.acc):
+    for ip_protein in ip_proteins:
       cursor.execute(match_sql, ip_protein)
 
     kegg_proteins = {}
@@ -493,7 +492,7 @@ with nnd_conn.cursor() as cursor:
         if not kegg_protein_id in kegg_proteins:
           entry = get_kegg_protein(kegg_protein_id)
           if len(entry) == 0:
-            log.info("KEGG protein " + kegg_protein_id + " not found\n")
+            log.info("KEGG protein " + kegg_protein_id + " not found")
             continue
           kegg_proteins[kegg_protein_id] = entry
         kegg_gene = kegg_proteins[kegg_protein_id][0]
@@ -505,9 +504,9 @@ with nnd_conn.cursor() as cursor:
     if not count % 1000:
       nnd_conn.commit()
       # May want to make this output an option?
-      log.info('Loaded: ' + str(count) + '\r')
+      log.info('Loaded: ' + str(count))
       sys.stdout.flush()
 
   nnd_conn.commit()
-  log.info('Loaded: ' + str(count) + "\n")
+  log.info('Loaded: ' + str(count))
 
