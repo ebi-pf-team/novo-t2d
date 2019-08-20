@@ -523,6 +523,5 @@ with nnd_conn.cursor() as cursor:
       log.info('Loaded: ' + str(count))
       sys.stdout.flush()
 
-  nnd_conn.commit()
   log.info('Loaded: ' + str(count))
 
