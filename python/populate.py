@@ -133,9 +133,10 @@ def get_ip_entry(entry_acc):
 
 def get_ip_proteins(protein_acc):
   # Better to get all in one go (omit the search parameter) but the pagination doesn't really work
-  url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?is_fragment=false&search=%s' % (protein_acc)
+  # url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?is_fragment=false&search=%s' % (protein_acc)
+  url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?search=%s' % (protein_acc)
   res = get_url(url)
-  if not len(res):
+  if not res:
     return []
   try:
     res = json.loads(get_url(url))
@@ -473,6 +474,13 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (cp, protein.acc))
     
     ip_proteins = get_ip_proteins(protein.acc)
+    # Should be an InterPro entry for each protein in UniProt; warn and skip if missing
+    # This will be because the API is still retrieving the entry and has cached a timeout
+    if not len(ip_proteins):
+      log.info("Missing InterPro entry for " + protein.acc + ": skipping")
+      nnd_conn.rollback()
+      continue
+
     for ip_protein in ip_proteins:
       if ip_protein[0] in ip_loaded:
         continue
