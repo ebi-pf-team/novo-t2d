@@ -316,9 +316,14 @@ def get_kegg_protein(pid):
         break
       m = re.match('\s+(\w+)', line)
       kegg_pathways.append(m.group(1))
-  if kegg_gene and kegg_protein_desc:
-    return [kegg_gene, kegg_protein_desc, kegg_pathways]
-  return []
+  # TODO: should we permit KEGG entries without genes/descriptions?
+  if len(kegg_pathways) and not kegg_gene:
+    log.info("KEGG protein " + kegg_protein_id + ": no gene name")
+  if len(kegg_pathways) and not kegg_protein_desc:
+    log.info("KEGG protein " + kegg_protein_id + ": no description")
+# if not len(kegg_pathways):
+#   log.info("KEGG protein " + kegg_protein_id + ": no pathways")
+  return [kegg_gene, kegg_protein_desc, kegg_pathways]
  
 
 nnd_conn = nnd_db()
