@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import requests
+import time
 import logging
 import argparse
 import re
@@ -277,11 +278,17 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
 
 
 def get_url(url):
-  r = requests.get(url, headers = { "Accept" : "application/json"})
-  if not r.ok:
-    r.raise_for_status()
-    sys.exit()
-  return r.text
+  attempt = 0
+  while attempt <= 3:
+    try:
+      r = requests.get(url, headers = { "Accept" : "application/json"})
+      if not r.ok:
+        r.raise_for_status()
+        sys.exit()
+      return r.text
+    except requests.exceptions.HTTPError as e:
+      attempt += 1
+      time.sleep(3)
 
 
 def get_kegg_protein(pid):
