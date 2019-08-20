@@ -239,6 +239,7 @@ def nnd_db():
   return pymysql.connect(host        = os.getenv('NND_HOST'),
                          user        = os.getenv('NND_USER'),
                          password    = os.getenv('NND_PASS'),
+                         port        = int(os.getenv('NND_PORT')),
                          db          = os.getenv('NND_DB'),
                          charset     = 'utf8',
                          cursorclass = pymysql.cursors.DictCursor)
@@ -455,7 +456,6 @@ with nnd_conn.cursor() as cursor:
     # Skip existing entires; may want to make this optional for speed?
     if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
       continue
-    count += 1
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
 
     for enst in protein.enst:
@@ -485,6 +485,8 @@ with nnd_conn.cursor() as cursor:
       log.info("Missing InterPro entry for " + protein.acc + ": skipping")
       nnd_conn.rollback()
       continue
+
+    count += 1
 
     for ip_protein in ip_proteins:
       if ip_protein[0] in ip_loaded:
