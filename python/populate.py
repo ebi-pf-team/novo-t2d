@@ -516,8 +516,9 @@ with nnd_conn.cursor() as cursor:
         for kegg_pathway in kegg_pathways:
           cursor.execute(kegg_step_sql, (kegg_pathway, protein.acc, kegg_protein_id, kegg_gene, kegg_protein_desc))
 
+    nnd_conn.commit()
+
     if not count % 1000:
-      nnd_conn.commit()
       # May want to make this output an option?
       log.info('Loaded: ' + str(count))
       sys.stdout.flush()
