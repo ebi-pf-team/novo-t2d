@@ -139,19 +139,18 @@ def get_ip_proteins(protein_acc):
   if not res:
     return []
   try:
-    res = json.loads(get_url(url))
+    res = json.loads(res)
   except json.decoder.JSONDecodeError as e:
-    print (res)
-    print (e)
+    log.error("Error decoding InterPro response" + e)
     sys.exit(1)
   if not 'results' in res:
-    print (res)
+    log.error("Missing 'results' field in json: " + res)
     sys.exit(1)
   results = res['results']
   if not len(results) or not 'entry_subset' in results[0]:
-    print(results)
+    log.error("Missing 'entry_subset' field in json: " + res)
     sys.exit(1)
-  entry_subsets = json.loads(get_url(url))['results'][0]['entry_subset']
+  entry_subsets = results[0]['entry_subset']
   entries = []
   for entry_subset in entry_subsets:
     entry = []
@@ -479,11 +478,8 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (cp, protein.acc))
     
     ip_proteins = get_ip_proteins(protein.acc)
-    # Should be an InterPro entry for each protein in UniProt; warn and skip if missing
-    # This will be because the API is still retrieving the entry and has cached a timeout
+    # Empty list should mean that there is no InterPro match
     if not len(ip_proteins):
-      log.info("Missing InterPro entry for " + protein.acc + ": skipping")
-      nnd_conn.rollback()
       continue
 
     count += 1
