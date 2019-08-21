@@ -346,17 +346,26 @@ for line in cp_versions:
   m = re.match('.*current -> (\d{4}-\d{2}-\d{2})', line)
   if m:
     cp_version = m.group(1)
+    break
 
 ukb = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/relnotes.txt').read().decode('utf-8').rstrip('\n')
 m = re.match('UniProt Release (\d{4}_\d{2})', ukb)
 if m:
   ukb_version = m.group(1)
 
+kegg_info = urllib.request.urlopen('http://rest.kegg.jp/info/kegg').read().decode('utf-8').rstrip('\n').split('\n')
+for line in kegg_info:
+  m = re.match('.*Release\s+(.*)', line)
+  if m:
+    kegg_version = m.group(1)
+    break
+
 with nnd_conn.cursor() as cursor:
   version_sql = insert_sql('versions', version_columns())
   cursor.execute('delete from versions')
   cursor.execute(version_sql, ('Complex portal', cp_version))
   cursor.execute(version_sql, ('UniProtKB', ukb_version))
+  cursor.execute(version_sql, ('KEGG', kegg_version))
   nnd_conn.commit()
 
 # Table: complex_portal
