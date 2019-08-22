@@ -437,16 +437,18 @@ log.info("Done table reactome")
 # Get mouse orthologs
 
 orthologs = {}
-for protein in get_protein(10090, args['trembl']):
-  for ko in protein.ko:
-    if not ko in orthologs:
-      orthologs[ko] = []
-    orthologs[ko].append([protein.acc, protein.org_id])
-log.info("Obtained mouse orthologs")
+for orth_species in [10090]:
+  for protein in get_protein(orth_species, args['trembl']):
+    for ko in protein.ko:
+      if not ko in orthologs:
+        orthologs[ko] = []
+      orthologs[ko].append([protein.acc, protein.org_id])
+  log.info("Obtained orthologs for " + str(orth_species))
 
 # Fill protein and all other tables that hang off it
 
 with nnd_conn.cursor() as cursor:
+  nnd_conn.ping(reconnect = True)
   protein_sql = insert_sql('protein', protein_columns())
   kegg_step_sql = insert_sql('kegg_step', kegg_step_columns())
   go_sql = insert_sql('gene_ontology', go_columns())
