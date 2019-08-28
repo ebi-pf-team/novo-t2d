@@ -144,7 +144,7 @@ def get_ip_proteins(protein_acc):
     log.error("Error decoding InterPro response" + e)
     sys.exit(1)
   if not 'results' in res:
-    log.error("Missing 'results' field in json: " + res)
+    log.error("Missing 'results' field in json: " + str(res))
     sys.exit(1)
   results = res['results']
   if not len(results) or not 'entry_subset' in results[0]:
@@ -254,8 +254,8 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
     else:
       url = "https://www.ebi.ac.uk/proteins/api/proteins?size=%d&isoform=0&taxid=%d&reviewed=true&offset=%d" % (batch, taxon, offset)
     try:
-      entries = json.loads(get_url(url))
-    except requests.HTTPError as e:
+      data = get_url(url)
+    except requests.exceptions.HTTPError as e:
       # in case of failure, likely an API timeout: gradually reduce the batch size
       if batch == 500:
         batch = 10
@@ -263,6 +263,7 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
       if batch == 10:
         batch = 1
         continue
+    entries = json.loads(data)
     if len(entries) == 0:
       return
     for entry in entries:
@@ -282,14 +283,13 @@ def get_url(url):
   attempt = 0
   while attempt <= 3:
     try:
-      r = requests.get(url, headers = { "Accept" : "application/json"})
-      if not r.ok:
-        r.raise_for_status()
-        sys.exit()
+      r = requests.get(url, headers = { "Accept" : "application/json"}, timeout = 10)
       return r.text
-    except requests.exceptions.HTTPError as e:
+    except (requests.exceptions.HTTPError, requests.exceptions.ReadTimeout) as e:
       attempt += 1
       time.sleep(3)
+  raise requests.exceptions.HTTPError
+
 
 
 def get_kegg_protein(pid):
