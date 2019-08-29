@@ -241,7 +241,7 @@ CREATE TABLE `reactome_step` (
   `reaction_id` varchar(20) DEFAULT NULL,
   `reaction_name` text,
   `reaction_role` text,
-  UNIQUE KEY `unique_id_acc` (`pathway_id`,`uniprot_acc`),
+  UNIQUE KEY `unique_id_acc` (`pathway_id`,`reaction_id`,`uniprot_acc`),
   KEY `fk_table1_reactome1_idx` (`pathway_id`),
   KEY `fk_table1_protein1_idx` (`uniprot_acc`),
   CONSTRAINT `fk_table1_protein1` FOREIGN KEY (`uniprot_acc`) REFERENCES `protein` (`uniprot_acc`) ON DELETE NO ACTION ON UPDATE NO ACTION,
