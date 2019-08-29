@@ -18,12 +18,10 @@ import cx_Oracle
 # Fixes needed:
 # - kegg.disease
 # - IPRs with multiple children (only one taken at present) - check query
-# - interpro_match start/end
 # - kegg_step via API - streamline?
 # - target - transfer/update from previous version?
 # - reactome version
 # - auto generate schema?
-# - config file for IPPRO parameters?
 
 
 # Convenience class for unpacking the protein json string
@@ -488,6 +486,7 @@ with nnd_conn.cursor() as cursor:
     if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
       continue
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
+    count += 1
 
     for enst in protein.enst:
       cursor.execute(ensembl_sql, (protein.acc, enst[1], enst[0]))
@@ -514,12 +513,8 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(complex_sql, (cp, protein.acc))
     
     ip_proteins = get_ip_proteins(protein.acc)
-    # Empty list should mean that there is no InterPro match
-    if not len(ip_proteins):
-      continue
 
-    count += 1
-
+    # Load any InterPro entries ...
     for ip_protein in ip_proteins:
       if ip_protein[0] in ip_loaded:
         continue
@@ -530,6 +525,7 @@ with nnd_conn.cursor() as cursor:
       cursor.execute(interpro_sql, entry)
       ip_loaded.add(ip_protein[0])
 
+    # ... followed by the matches themselves
     for ip_protein in ip_proteins:
       cursor.execute(match_sql, ip_protein)
 
