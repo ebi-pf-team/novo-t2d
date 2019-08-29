@@ -257,13 +257,11 @@ DROP TABLE IF EXISTS `target`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `target` (
-  `uniprot_acc` varchar(10) NOT NULL,
-  `source` text NOT NULL,
-  `disease` text,
-  `efo_id` text,
-  `target_type` text,
-  `proteome` varchar(45) DEFAULT NULL,
+ `uniprot_acc` varchar(10) NOT NULL,
+  `source` varchar(40) NOT NULL,
+  UNIQUE KEY `uniprot_acc_source` (`uniprot_acc`,`source`),
   KEY `fk_target_protein1_idx` (`uniprot_acc`),
+  KEY `key_source` (`source`),
   CONSTRAINT `fk_target_protein1` FOREIGN KEY (`uniprot_acc`) REFERENCES `protein` (`uniprot_acc`) ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
