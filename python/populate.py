@@ -144,7 +144,7 @@ def get_ip_proteins(protein_acc):
     log.error("Error decoding InterPro response" + e)
     sys.exit(1)
   if not 'results' in res:
-    log.error("Missing 'results' field in json: " + str(res))
+    log.error("Missing 'results' field in json for URL " + url + ": " + str(res))
     sys.exit(1)
   results = res['results']
   if not len(results) or not 'entry_subset' in results[0]:
@@ -284,12 +284,13 @@ def get_url(url):
   while attempt <= 3:
     try:
       r = requests.get(url, headers = { "Accept" : "application/json"}, timeout = 10)
+      if not r.ok:
+        raise requests.exceptions.HTTPError
       return r.text
     except (requests.exceptions.HTTPError, requests.exceptions.ReadTimeout) as e:
       attempt += 1
       time.sleep(3)
-  raise requests.exceptions.HTTPError
-
+  raise requests.exceptions.HTTPError("Error retrieving " + url)
 
 
 def get_kegg_protein(pid):
@@ -437,7 +438,7 @@ log.info("Done table reactome")
 # Get mouse orthologs
 
 orthologs = {}
-for orth_species in [10090]:
+for orth_species in [10090, 10116]:
   for protein in get_protein(orth_species, args['trembl']):
     for ko in protein.ko:
       if not ko in orthologs:
