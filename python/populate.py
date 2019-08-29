@@ -279,7 +279,7 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
     # reset batch size
     if offset % 500 == 0:
       batch = 500
-    elif offset % 10 == 0:
+    elif offset % 10 == 0 and batch != 500:
       batch = 10
 
 
