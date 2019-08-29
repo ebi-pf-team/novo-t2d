@@ -462,7 +462,8 @@ with open("reactome_reaction_exporter.txt") as fh:
     if not ukb in reactions:
       reactions[ukb] = []
     fields.insert(1, fields.pop(3)) # Shift the order to match the DB columns
-    reactions[ukb] = fields
+    reactions[ukb].append(fields)
+log.info("Obtained reactome reactions")
 
 # Fill protein and all other tables that hang off it
 
