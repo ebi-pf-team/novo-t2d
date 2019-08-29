@@ -267,6 +267,7 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
         batch = 1
         continue
     entries = json.loads(data)
+    data = None
     if len(entries) == 0:
       return
     for entry in entries:
