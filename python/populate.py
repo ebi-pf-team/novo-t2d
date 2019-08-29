@@ -19,10 +19,9 @@ import cx_Oracle
 # - kegg.disease
 # - IPRs with multiple children (only one taken at present) - check query
 # - interpro_match start/end
-# - reactome_step
 # - kegg_step via API - streamline?
 # - target - transfer/update from previous version?
-# - versions
+# - reactome version
 # - auto generate schema?
 # - config file for IPPRO parameters?
 
@@ -186,6 +185,10 @@ def reactome_columns():
   return ['pathway_id', 'description', 'species', 'number_steps']
 
 
+def reactome_step_columns():
+  return ['pathway_id', 'uniprot_acc', 'reaction_id', 'reaction_name', 'reaction_role']
+
+
 def interpro_match_columns():
   return ['interpro_acc', 'uniprot_acc', 'start', 'end']
 
@@ -283,7 +286,7 @@ def get_url(url):
   attempt = 0
   while attempt <= 3:
     try:
-      r = requests.get(url, headers = { "Accept" : "application/json"}, timeout = 10)
+      r = requests.get(url, headers = { "Accept" : "application/json"}, timeout = 30)
       if not r.ok:
         raise requests.exceptions.HTTPError
       return r.text
@@ -435,7 +438,7 @@ with nnd_conn.cursor() as cursor:
     nnd_conn.commit()
 log.info("Done table reactome")
 
-# Get mouse orthologs
+# Get orthologs
 
 orthologs = {}
 for orth_species in [10090, 10116]:
@@ -446,12 +449,27 @@ for orth_species in [10090, 10116]:
       orthologs[ko].append([protein.acc, protein.org_id])
   log.info("Obtained orthologs for " + str(orth_species))
 
+# Get reactome reactions
+
+reactions = {}
+# Export from reactome team, may change if available via web?
+with open("reactome_reaction_exporter.txt") as fh:
+  for line in fh:
+    fields = line.rstrip().split('\t')
+    fields[-1] = fields[-1].replace('"', '')
+    ukb = fields[3]
+    if not ukb in reactions:
+      reactions[ukb] = []
+    fields.insert(1, fields.pop(3)) # Shift the order to match the DB columns
+    reactions[ukb] = fields
+
 # Fill protein and all other tables that hang off it
 
 with nnd_conn.cursor() as cursor:
   nnd_conn.ping(reconnect = True)
   protein_sql = insert_sql('protein', protein_columns())
   kegg_step_sql = insert_sql('kegg_step', kegg_step_columns())
+  reactome_step_sql = insert_sql('reactome_step', reactome_step_columns())
   go_sql = insert_sql('gene_ontology', go_columns())
   ensembl_sql = insert_sql('ensembl_transcript', ensembl_columns())
   complex_sql = insert_sql('complex_component', complex_component_columns())
@@ -471,6 +489,10 @@ with nnd_conn.cursor() as cursor:
 
     for enst in protein.enst:
       cursor.execute(ensembl_sql, (protein.acc, enst[1], enst[0]))
+
+    if protein.acc in reactions:
+      for reaction in reactions[protein.acc]:
+        cursor.execute(reactome_step_sql, (reaction))
 
     protein_orthologs = set() # Account for identical orthologs mapping > once via different KOs
     for ko in protein.ko:
