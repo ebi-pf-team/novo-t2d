@@ -239,7 +239,7 @@ CREATE TABLE `reactome_step` (
   `pathway_id` varchar(20) NOT NULL,
   `uniprot_acc` varchar(10) NOT NULL,
   `reaction_id` varchar(20) DEFAULT NULL,
-  `reaction_name` text,
+  `reaction_name` text CHARACTER SET utf8 COLLATE utf8_bin,
   `reaction_role` text,
   UNIQUE KEY `unique_id_acc` (`pathway_id`,`reaction_id`,`uniprot_acc`),
   KEY `fk_table1_reactome1_idx` (`pathway_id`),
