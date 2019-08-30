@@ -497,9 +497,9 @@ with nnd_conn.cursor() as cursor:
     for ko in protein.ko:
       if ko in orthologs:
         for ortholog in orthologs[ko]:
-          protein_orthologs.add((ortholog[0], ortholog[1]))
+          protein_orthologs.add((protein.acc, ortholog[0], ortholog[1]))
     for po in protein_orthologs:
-      cursor.execute(ortholog_sql, (protein.acc, po[0], po[1]))
+      cursor.execute(ortholog_sql, po)
 
     for pdb in protein.pdb:
       cursor.execute(pdb_sql, (protein.acc, pdb[0], pdb[1]))
