@@ -10,7 +10,6 @@ import sys
 import urllib
 import json
 import pymysql
-import cx_Oracle
 
 
 # Populate NovoNordisk database, pulling data from UniProt proteins API and other sources
@@ -19,7 +18,7 @@ import cx_Oracle
 # - kegg.disease
 # - IPRs with multiple children (only one taken at present) - check query
 # - kegg_step via API - streamline?
-# - target - transfer/update from previous version?
+# - target - populate acc/source, possibly from second script
 # - reactome version
 # - auto generate schema?
 
@@ -184,7 +183,7 @@ def reactome_columns():
 
 
 def reactome_step_columns():
-  return ['pathway_id', 'uniprot_acc', 'reaction_id', 'reaction_name', 'reaction_role']
+  return ['pathway_id', 'reaction_id', 'reaction_name', 'uniprot_acc', 'reaction_role']
 
 
 def interpro_match_columns():
@@ -459,7 +458,6 @@ with open("reactome_reaction_exporter.txt") as fh:
     ukb = fields[3]
     if not ukb in reactions:
       reactions[ukb] = []
-    fields.insert(1, fields.pop(3)) # Shift the order to match the DB columns
     reactions[ukb].append(fields)
 log.info("Obtained reactome reactions")
 
