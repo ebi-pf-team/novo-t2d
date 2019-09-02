@@ -370,6 +370,42 @@ with nnd_conn.cursor() as cursor:
   cursor.execute(version_sql, ('KEGG', kegg_version))
   nnd_conn.commit()
 
+# Pull orthologs and reactome reactions now as it's quicker to get for
+# all proteins
+
+# Get orthologs
+
+orthologs = {}
+for orth_species in [10090, 10116]:
+  for protein in get_protein(orth_species, args['trembl']):
+    for ko in protein.ko:
+      if not ko in orthologs:
+        orthologs[ko] = []
+      orthologs[ko].append([protein.acc, protein.org_id])
+  log.info("Obtained orthologs for " + str(orth_species))
+
+# Get reactome reactions
+
+reactions = {}
+reactome_steps = {}
+# Export from reactome team, may change if available via web?
+with open("reactome_reaction_exporter.txt") as fh:
+  for line in fh:
+    fields = line.rstrip().split('\t')
+    fields[-1] = fields[-1].replace('"', '')
+    pathway_id = fields[0]
+    ukb = fields[3]
+    if not ukb in reactions:
+      reactions[ukb] = []
+    reactions[ukb].append(fields)
+    if not pathway_id in reactome_steps:
+      reactome_steps[pathway_id] = set()
+    reactome_steps[pathway_id].add(fields[1])
+log.info("Obtained reactome reactions")
+
+# Populate tables which don't link directly to protein:
+# complex_portal, kegg, reactome
+
 # Table: complex_portal
 
 cp = urllib.request.urlopen('ftp://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/homo_sapiens.tsv').read().decode('utf-8').rstrip('\n').split('\n')
@@ -421,45 +457,20 @@ log.info("Done table kegg")
 reactome_sql = insert_sql('reactome', reactome_columns())
 with nnd_conn.cursor() as cursor:
   if not count_table_rows(cursor, 'reactome'):
-    reactomes = {}
+    reactomes = set()
     reactome = urllib.request.urlopen('https://reactome.org/download/current/UniProt2Reactome.txt').read().decode('utf-8').rstrip('\n').split('\n')
     for line in reactome:
       f = line.split('\t')
       if f[5] != 'Homo sapiens':
         continue
-      if not (f[1], f[3], f[5]) in reactomes:
-        reactomes[(f[1], f[3], f[5])] = 0
-      reactomes[(f[1], f[3], f[5])] += 1
+      r = (f[1], f[3], f[5], len(reactome_steps[f[1]]))
+      if not r in reactomes:
+        reactomes.add(r)
 
     for r in reactomes:
-      cursor.execute(reactome_sql, (r[0], r[1], r[2], reactomes[(r[0], r[1], r[2])]))
+      cursor.execute(reactome_sql, r)
     nnd_conn.commit()
 log.info("Done table reactome")
-
-# Get orthologs
-
-orthologs = {}
-for orth_species in [10090, 10116]:
-  for protein in get_protein(orth_species, args['trembl']):
-    for ko in protein.ko:
-      if not ko in orthologs:
-        orthologs[ko] = []
-      orthologs[ko].append([protein.acc, protein.org_id])
-  log.info("Obtained orthologs for " + str(orth_species))
-
-# Get reactome reactions
-
-reactions = {}
-# Export from reactome team, may change if available via web?
-with open("reactome_reaction_exporter.txt") as fh:
-  for line in fh:
-    fields = line.rstrip().split('\t')
-    fields[-1] = fields[-1].replace('"', '')
-    ukb = fields[3]
-    if not ukb in reactions:
-      reactions[ukb] = []
-    reactions[ukb].append(fields)
-log.info("Obtained reactome reactions")
 
 # Fill protein and all other tables that hang off it
 
@@ -491,7 +502,7 @@ with nnd_conn.cursor() as cursor:
 
     if protein.acc in reactions:
       for reaction in reactions[protein.acc]:
-        cursor.execute(reactome_step_sql, (reaction))
+        cursor.execute(reactome_step_sql, reaction)
 
     protein_orthologs = set() # Account for identical orthologs mapping > once via different KOs
     for ko in protein.ko:
