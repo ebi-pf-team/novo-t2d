@@ -282,7 +282,7 @@ def get_url(url):
       if not r.ok:
         raise requests.exceptions.HTTPError
       return r.text
-    except (requests.exceptions.HTTPError, requests.exceptions.ReadTimeout) as e:
+    except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, requests.exceptions.ReadTimeout) as e:
       attempt += 1
       time.sleep(3)
   raise requests.exceptions.HTTPError("Error retrieving " + url)
