@@ -151,7 +151,7 @@ def get_ip_proteins(protein_acc):
   for entry_subset in entry_subsets:
     entry = []
     entry.append(entry_subset['accession'].upper())
-    entry.append(protein.acc)
+    entry.append(protein_acc)
     entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['start'])
     entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['end'])
     entries.append(entry)
