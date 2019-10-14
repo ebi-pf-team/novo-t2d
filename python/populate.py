@@ -115,9 +115,7 @@ ip_type_dict = {
 
 
 def get_ip_entry(entry_acc):
-  # url = 'https://www.ebi.ac.uk/interpro/beta/api/entry/InterPro/%s/protein/UniProt' % (entry_acc)
-  # url = 'http://www.ebi.ac.uk/interpro/beta/api/entry/all/protein/UniProt/%s' % (entry_acc)
-  url = 'https://www.ebi.ac.uk/interpro/beta/api/entry/InterPro/%s' % (entry_acc)
+  url = 'https://www.ebi.ac.uk/interpro/api/entry/InterPro/%s' % (entry_acc)
   entry = json.loads(get_url(url))['metadata']
   entry_type = ip_type_dict[entry['type']]
   entry_name = entry['name']['short']
