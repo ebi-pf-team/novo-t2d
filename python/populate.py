@@ -127,7 +127,7 @@ def get_ip_entry(entry_acc):
   return [entry_acc, entry_type, entry_name, num_proteins, child, 1]
 
 
-def get_ip_proteins(protein_acc):
+def get_ip_protein(protein_acc):
   # Better to get all in one go (omit the search parameter) but the pagination doesn't really work
   # url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?is_fragment=false&search=%s' % (protein_acc)
   url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?search=%s' % (protein_acc)
@@ -522,7 +522,7 @@ with nnd_conn.cursor() as cursor:
     for cp in protein.complex_portal_xref:
       cursor.execute(complex_sql, (cp, protein.acc))
     
-    ip_proteins = get_ip_proteins(protein.acc)
+    ip_proteins = get_ip_protein(protein.acc)
 
     # Load any InterPro entries ...
     for ip_protein in ip_proteins:
