@@ -128,9 +128,7 @@ def get_ip_entry(entry_acc):
 
 
 def get_ip_protein(protein_acc):
-  # Better to get all in one go (omit the search parameter) but the pagination doesn't really work
-  # url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?is_fragment=false&search=%s' % (protein_acc)
-  url = 'https://www.ebi.ac.uk/interpro/beta/api/protein/UniProt/entry/InterPro/taxonomy/uniprot/9606?search=%s' % (protein_acc)
+  url = 'https://www.ebi.ac.uk/interpro/api/protein/UniProt/%s/entry/InterPro?is_fragment=false' % (protein_acc)
   res = get_url(url)
   if not res:
     return []
@@ -139,22 +137,20 @@ def get_ip_protein(protein_acc):
   except json.decoder.JSONDecodeError as e:
     log.error("Error decoding InterPro response" + e)
     sys.exit(1)
-  if not 'results' in res:
-    log.error("Missing 'results' field in json for URL " + url + ": " + str(res))
+  if not 'entry_subset' in res:
+    log.error("Missing 'entry_subset' field in json for URL " + url + ": " + str(res))
     sys.exit(1)
-  results = res['results']
-  if not len(results) or not 'entry_subset' in results[0]:
-    log.error("Missing 'entry_subset' field in json: " + res)
-    sys.exit(1)
-  entry_subsets = results[0]['entry_subset']
+  entry_subsets = res['entry_subset']
   entries = []
   for entry_subset in entry_subsets:
-    entry = []
-    entry.append(entry_subset['accession'].upper())
-    entry.append(protein_acc)
-    entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['start'])
-    entry.append(entry_subset['entry_protein_locations'][0]['fragments'][0]['end'])
-    entries.append(entry)
+    for location in entry_subset['entry_protein_locations']:
+        entries.append([
+            entry_subset['accession'].upper(),
+            protein_acc,
+            min([f['start'] for f in location['fragments']]),
+            max([f['end'] for f in location['fragments']])
+        ])
+
   return entries
 
 
