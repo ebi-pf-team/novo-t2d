@@ -279,6 +279,7 @@ def get_url(url):
   while attempt <= 3:
     try:
       r = requests.get(url, headers = { "Accept" : "application/json"}, timeout = 30)
+      r.encoding = 'utf8'
       if not r.ok:
         raise requests.exceptions.HTTPError
       return r.text
@@ -290,7 +291,7 @@ def get_url(url):
 
 def get_kegg_protein(pid):
   try:
-    kegg_entry = urllib.request.urlopen('http://rest.kegg.jp/get/%s' % (pid)).read().decode('utf-8').rstrip('\n').split('\n')
+    kegg_entry = get_url('http://rest.kegg.jp/get/%s' % (pid)).rstrip('\n').split('\n')
   except urllib.error.HTTPError as e:
     if str(e) == 'HTTP Error 404: Not Found':
       return []
@@ -349,7 +350,7 @@ m = re.match('UniProt Release (\d{4}_\d{2})', ukb)
 if m:
   ukb_version = m.group(1)
 
-kegg_info = urllib.request.urlopen('http://rest.kegg.jp/info/kegg').read().decode('utf-8').rstrip('\n').split('\n')
+kegg_info = get_url('http://rest.kegg.jp/info/kegg').rstrip('\n').split('\n')
 for line in kegg_info:
   m = re.match('.*Release\s+(.*)', line)
   if m:
@@ -418,14 +419,14 @@ log.info("Done table complex_portal")
 # Table: kegg
 
 kegg_desc = {}
-keggs = urllib.request.urlopen('http://rest.kegg.jp/list/pathway').read().decode('utf-8').rstrip('\n').split('\n')
+keggs = get_url('http://rest.kegg.jp/list/pathway').rstrip('\n').split('\n')
 # Get descriptions
 for line in keggs:
   acc, desc = line.rstrip('\n').split('\t', maxsplit = 1)
   acc = acc.replace('path:map', 'hsa') # Yuk, check API to see if there's a better way
   kegg_desc[acc] = desc
 
-keggs = urllib.request.urlopen('http://rest.kegg.jp/link/hsa/pathway').read().decode('utf-8').rstrip('\n').split('\n')
+keggs = get_url('http://rest.kegg.jp/link/hsa/pathway').rstrip('\n').split('\n')
 kegg_counts = {}
 kegg_sql = insert_sql('kegg', kegg_columns())
 with nnd_conn.cursor() as cursor:
@@ -452,7 +453,7 @@ reactome_sql = insert_sql('reactome', reactome_columns())
 with nnd_conn.cursor() as cursor:
   if not count_table_rows(cursor, 'reactome'):
     reactomes = set()
-    reactome = urllib.request.urlopen('https://reactome.org/download/current/UniProt2Reactome.txt').read().decode('utf-8').rstrip('\n').split('\n')
+    reactome = get_url('https://reactome.org/download/current/UniProt2Reactome.txt').rstrip('\n').split('\n')
     for line in reactome:
       f = line.split('\t')
       if f[5] != 'Homo sapiens':
@@ -535,7 +536,7 @@ with nnd_conn.cursor() as cursor:
     kegg_proteins = {}
 
     # kegg_step
-    res = urllib.request.urlopen('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).read().decode('utf-8').rstrip('\n')
+    res = get_url('http://rest.kegg.jp/conv/genes/up:%s' % (protein.acc)).rstrip('\n')
     if res:
       kegg_protein_ids = res.split('\n')
       # Convert UKB acc to kegg protein acc
