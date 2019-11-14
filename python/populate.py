@@ -257,6 +257,8 @@ def get_protein(taxon, trembl, max = -1): # Max for testing purposes
       if batch == 10:
         batch = 1
         continue
+      log.error("Error retrieving UniProt entry from URL " + url)
+      sys.exit(1)
     entries = json.loads(data)
     data = None
     if len(entries) == 0:
