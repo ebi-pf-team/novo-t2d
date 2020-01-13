@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import requests
-import time
-import logging
 import argparse
-import re
+import json
+import logging
 import os
+import re
 import sys
+import time
 import urllib.error
 import urllib.request
-import json
+
+import requests
 import pymysql
 
 
