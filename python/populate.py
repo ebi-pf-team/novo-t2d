@@ -20,7 +20,6 @@ import pymysql
 # - IPRs with multiple children (only one taken at present) - check query
 # - kegg_step via API - streamline?
 # - target - populate acc/source, possibly from second script
-# - reactome version
 # - auto generate schema?
 
 
@@ -360,12 +359,17 @@ for line in kegg_info:
     kegg_version = m.group(1)
     break
 
+reactome_version = urllib.request.urlopen("https://reactome.org/ContentService/data/database/version").read().decode("utf-8").strip()
+interpro_version = urllib.request.urlopen("https://www.ebi.ac.uk/interpro/api/").info()["InterPro-Version"].strip()
+
 with nnd_conn.cursor() as cursor:
   version_sql = insert_sql('versions', version_columns())
   cursor.execute('delete from versions')
   cursor.execute(version_sql, ('Complex portal', cp_version))
   cursor.execute(version_sql, ('UniProtKB', ukb_version))
   cursor.execute(version_sql, ('KEGG', kegg_version))
+  cursor.execute(version_sql, ('Reactome', reactome_version))
+  cursor.execute(version_sql, ('InterPro', interpro_version))
   nnd_conn.commit()
 
 # Pull orthologs and reactome reactions now as it's quicker to get for
@@ -386,8 +390,6 @@ for orth_species in [10090, 10116]:
 
 reactions = {}
 reactome_steps = {}
-reactome_version = urllib.request.urlopen("https://reactome.org/ContentService/data/database/version").read().decode("utf-8").strip()
-
 with urllib.request.urlopen("https://reactome.org/download/current/reactome_reaction_exporter_v{}.txt".format(reactome_version)) as res:
     next(res) # Skip header
 
