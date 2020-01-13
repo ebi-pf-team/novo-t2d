@@ -97,9 +97,9 @@ class Protein(object):
 
 
 def get_args(args):
-    parser = argparse.ArgumentParser(prog = args[0])
-    parser.add_argument('-t', '--tr', action ='store_true', dest = 'trembl', required = False, help = 'Include TrEMBL')
-    parser.add_argument("-l", "--log", help = "log file", dest = "log", action = "store", required = False)
+    parser = argparse.ArgumentParser(prog=args[0])
+    parser.add_argument("--trembl", action="store_true", dest="trembl", required=False, help="Include TrEMBL")
+    parser.add_argument("--log", action="store", dest="log", required=False, help="log file")
     return vars(parser.parse_args())
 
 
@@ -502,7 +502,7 @@ with nnd_conn.cursor() as cursor:
 
   count = 0
   for protein in get_protein(9606, args['trembl']):
-    # Skip existing entires; may want to make this optional for speed?
+    # Skip existing entries; may want to make this optional for speed?
     if check_entry(cursor, 'protein', 'uniprot_acc', protein.acc):
       continue
     cursor.execute(protein_sql, (protein.acc, protein.id, protein.reviewed, ','.join(protein.genes), protein.name, str(protein.org_id), ';'.join(protein.enst_f), ';'.join(protein.complex_portal_xref), ';'.join(protein.reactome_xref), ';'.join(protein.kegg_xref), protein.secreted, ';'.join(protein.proteomes)))
