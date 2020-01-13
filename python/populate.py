@@ -7,7 +7,8 @@ import argparse
 import re
 import os
 import sys
-import urllib
+import urllib.error
+import urllib.request
 import json
 import pymysql
 
@@ -385,19 +386,32 @@ for orth_species in [10090, 10116]:
 
 reactions = {}
 reactome_steps = {}
-# Export from reactome team, may change if available via web?
-with open("reactome_reaction_exporter.txt") as fh:
-  for line in fh:
-    fields = line.rstrip().split('\t')
-    fields[-1] = fields[-1].replace('"', '')
-    pathway_id = fields[0]
-    ukb = fields[3]
-    if not ukb in reactions:
-      reactions[ukb] = []
-    reactions[ukb].append(fields)
-    if not pathway_id in reactome_steps:
-      reactome_steps[pathway_id] = set()
-    reactome_steps[pathway_id].add(fields[1])
+reactome_version = urllib.request.urlopen("https://reactome.org/ContentService/data/database/version").read().decode("utf-8").strip()
+
+with urllib.request.urlopen("https://reactome.org/download/current/reactome_reaction_exporter_v{}.txt".format(reactome_version)) as res:
+    next(res) # Skip header
+
+    for line in res:
+      fields = line.rstrip().split('\t')
+      fields[-1] = fields[-1].replace('"', '')
+      pathway_id = fields[0]
+      reaction_id = fields[1]
+      reaction_name = fields[2]
+      uniprot_acc = fields[3]
+      reaction_role = fields[4][1:-1]  # trim leading/trailing square brackets
+
+      try:
+        reactions[uniprot_acc].append((pathway_id, reaction_id, reaction_name,
+                                       uniprot_acc, reaction_role))
+      except KeyError:
+        reactions[uniprot_acc] = [(pathway_id, reaction_id, reaction_name,
+                                   uniprot_acc, reaction_role)]
+
+      try:
+        reactome_steps[pathway_id].add(reaction_id)
+      except KeyError:
+        reactome_steps[pathway_id] = {reaction_id}
+
 log.info("Obtained reactome reactions")
 
 # Populate tables which don't link directly to protein:
