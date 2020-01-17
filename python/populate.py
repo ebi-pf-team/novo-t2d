@@ -325,7 +325,7 @@ def get_kegg_protein(pid):
 # if not len(kegg_pathways):
 #   log.info("KEGG protein " + kegg_protein_id + ": no pathways")
   return [kegg_gene, kegg_protein_desc, kegg_pathways]
- 
+
 
 nnd_conn = nnd_db()
 
@@ -396,7 +396,7 @@ with urllib.request.urlopen("https://reactome.org/download/current/reactome_reac
     next(res) # Skip header
 
     for line in res:
-      fields = line.rstrip().split('\t')
+      fields = line.decode("utf-8").rstrip().split('\t')
       fields[-1] = fields[-1].replace('"', '')
       pathway_id = fields[0]
       reaction_id = fields[1]
@@ -529,13 +529,13 @@ with nnd_conn.cursor() as cursor:
 
     for pdb in protein.pdb:
       cursor.execute(pdb_sql, (protein.acc, pdb[0], pdb[1]))
-    
+
     for go in protein.go:
       cursor.execute(go_sql, (protein.acc, go[0], go[1], go[2]))
-    
+
     for cp in protein.complex_portal_xref:
       cursor.execute(complex_sql, (cp, protein.acc))
-    
+
     ip_proteins = get_ip_protein(protein.acc)
 
     # Load any InterPro entries ...
@@ -583,4 +583,3 @@ with nnd_conn.cursor() as cursor:
       sys.stdout.flush()
 
   log.info('Loaded: ' + str(count))
-
