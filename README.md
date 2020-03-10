@@ -1,4 +1,5 @@
 # novo-t2d
+
 Populating database for Novo Nordisk.
 
 ## Requirements
@@ -29,11 +30,11 @@ export NND_DB=...
 Then, run the script:
 
 ```
-python populate.py [--trembl] [--log LOGFILE]
+python populate.py [-t/--threads THREADS] [--debug]
 ``` 
 
 Options:
 
-* `--trembl`: import TrEMBL/unreviewed proteins (default: disabled).
-* `--log FILE`: write log messages to *FILE* (default: log messages printed in console).
+* `-t/--threads`: maximum number of parallel threads used to call the InterPro REST API (default: 4).
+* `--verbose`: increase verbosity by showing progress.
 
