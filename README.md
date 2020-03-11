@@ -30,7 +30,7 @@ export NND_DB=...
 Then, run the script:
 
 ```
-python populate.py [-t/--threads THREADS] [--debug]
+python populate.py [-t/--threads THREADS] [--verbose]
 ``` 
 
 Options:
